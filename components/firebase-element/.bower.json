@@ -1,0 +1,19 @@
+{
+  "name": "firebase-element",
+  "private": true,
+  "dependencies": {
+    "polymer": "Polymer/polymer#master",
+    "firebase": "*"
+  },
+  "homepage": "https://github.com/Polymer/firebase-element",
+  "_release": "ff18cb998c",
+  "_resolution": {
+    "type": "branch",
+    "branch": "master",
+    "commit": "ff18cb998c65636826a564f078aa43a1bbdb57fa"
+  },
+  "_source": "git://github.com/Polymer/firebase-element.git",
+  "_target": "master",
+  "_originalSource": "Polymer/firebase-element",
+  "_direct": true
+}
