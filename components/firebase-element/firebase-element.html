@@ -123,6 +123,12 @@ Example:
   Polymer('firebase-element', {
     publish: {
       /**
+       * Fired when properties on `data` are added, removed, or modified.
+       *
+       * @event data-change
+       */
+
+      /**
        * Firebase location mapped to `data`.
        * @attribute location
        * @type String
@@ -171,6 +177,12 @@ Example:
        */
       childEvents: false,
       /**
+       * When set, data will be stored with the given Firebase priority level.
+       * @attribute priority
+       * @type Number
+       */
+      priority: null,
+      /**
        * If true, will log various occurances to the console api.
        * @attribute log
        * @type Boolean
@@ -181,36 +193,42 @@ Example:
       'ref limit start end': 'requery'
     },
     locationChanged: function() {
-      if (this.query) {
-        this.query.off();
-      }
+      // shut-down previous observers (if any)
+      this.closeQuery();
       this.closeObserver();
+      // connect to db
       if (this.location) {
         this.ref = new Firebase(this.location);
+      } else {
+        this.ref = null;
       }
     },
     requery: function() {
+      // shut-down previous observers (if any)
+      this.closeQuery();
+      this.closeObserver();
+      // construct new query
       var query = this.ref;
-      if (this.start) {
-        query = query.startAt(this.start);
+      if (query) {
+        if (this.start) {
+          query = query.startAt(this.start);
+        }
+        if (this.end) {
+          query = query.endAt(this.start);
+        }
+        if (this.limit > 0) {
+          query = query.limit(this.limit);
+        }
+        this.query = query;
       }
-      if (this.end) {
-        query = query.endAt(this.start);
-      }
-      if (this.limit > 0) {
-        query = query.limit(this.limit);
-      }
-      this.query = query;
     },
     queryChanged: function() {
       // initialize
       this._setData(null);
       // data acquisition
       this.query.once('value', this.valueLoaded, this);
-      // server side dynamics
-      this.query.on('child_added', this.childAdded, this);
-      this.query.on('child_changed', this.childChanged, this);
-      this.query.on('child_removed', this.childRemoved, this);
+      // observe server-side data
+      this.observeQuery();
     },
     valueLoaded: function(snapshot) {
       if (this.ref.name() !== snapshot.name()) {
@@ -218,11 +236,36 @@ Example:
         return;
       }
       this.log && console.log('acquired value ' + this.location);
-      this._setData(snapshot.val() || {});
-      this.dataChange();
+      this._setData(snapshot.val());
+      if (this.data) {
+        this.dataChange();
+      } else {
+        this.dataExists = false;
+      }
     },
+    _setData: function(data) {
+      this.closeObserver();
+      this.data = this._data = data;
+      this.observeData();
+    },
+    //
+    // server-side data-observation
+    //
+    observeQuery: function() {
+      // server side dynamics
+      this.query.on('child_added', this.childAdded, this);
+      this.query.on('child_changed', this.childChanged, this);
+      this.query.on('child_removed', this.childRemoved, this);
+    },
+    closeQuery: function() {
+      if (this.query) {
+        this.query.off();
+      }
+    },
+    //
+    // client-side data-observation
+    //
     observeData: function() {
-      // client-side dynamics
       if (this.data instanceof Array) {
         this.observer = new ArrayObserver(this.data);
         this.observer.open(this.observeArray.bind(this));
@@ -231,74 +274,87 @@ Example:
         this.observer.open(this.observeObject.bind(this));
       }
     },
-    _setData: function(data) {
-      this.closeObserver();
-      this.data = this._data = data;
-      this.observeData();
-    },
-    dataChanged: function() {
-      if (this._data !== this.data) {
-        this._setData(this.data);
-        this.commit();
-      }
-    },
     closeObserver: function() {
       if (this.observer) {
         this.observer.close();
         this.observer = null;
       }
     },
-    // server-side effects
-    childAdded: function(snapshot) {
-      // ignore initial adds, we'll take the 'value' instead
-      if (this.data) {
-        this.updateData(snapshot);
-      }
-      this.log && console.log('child-added ' + snapshot.name());
-      if (this.childEvents) {
-        this.fire('child-added', {name: snapshot.name(), value: snapshot.val()});
+    dataChanged: function() {
+      if (!this._data && !this.dataExists) {
+        if (this._data !== this.data) {
+          this._setData(this.data);
+          this.commit();
+        }
       }
     },
-    childChanged: function(snapshot) {
-      this.updateData(snapshot);
-      this.log && console.log('child-changed ' + snapshot.name());
-      if (this.childEvents) {
-        this.fire('child-changed', {name: snapshot.name(), value: snapshot.val()});
-      }
-    },
-    childRemoved: function(snapshot) {
-      this.removeData(snapshot.name());
-      this.log && console.log('child-removed ' + snapshot.name());
-      if (this.childEvents) {
-        this.fire('child-removed', {name: snapshot.name(), value: snapshot.val()});
-      }
-    },
-    updateData: function(snapshot) {
-      this.data[snapshot.name()] = snapshot.val();
-      //this.discardObservations();
-      this.dataChange();
-    },
-    removeData: function(key) {
-      if (this.data instanceof Array) {
-        this.data.splice(key, 1);
-      } else {
-        delete this.data[key];
-      }
-      //this.discardObservations();
-      this.dataChange();
-    },
-    dataChange: function() {
-      this.job('change', function() {
-        this.keys = this.data ? Object.keys(this.data) : [];
-        this.fire('data-change');
-      });
-    },
-    // client-side effects
     discardObservations: function() {
       if (this.observer) {
         this.observer.discardChanges();
       }
     },
+    deliverObservations: function() {
+      if (this.observer) {
+        this.observer.deliver();
+      }
+    },
+    //
+    // server-side effects
+    //
+    childAdded: function(snapshot) {
+      // ignore initial adds, we'll take the 'value' instead
+      this.modulateData('updateData', snapshot);
+      this.childEvent('child-added', snapshot);
+    },
+    childChanged: function(snapshot) {
+      this.modulateData('updateData', snapshot);
+      this.childEvent('child-changed', snapshot);
+    },
+    childRemoved: function(snapshot) {
+      this.modulateData('removeData', snapshot);
+      this.childEvent('child-removed', snapshot);
+    },
+    childEvent: function(kind, snapshot) {
+      this.log && console.log(kind + snapshot.name());
+      if (this.childEvents) {
+        this.fire(kind, {name: snapshot.name(), value: snapshot.val()});
+      }
+    },
+    modulateData: function(operation, snapshot) {
+      // handle any pending observations
+      this.deliverObservations();
+      this[operation](snapshot);
+      this.dataChange();
+      // discard any observations so we don't send this value back to the
+      // server, it may already be stale from the server's perspective
+      this.discardObservations();      
+    },
+    updateData: function(snapshot) {
+      if (!this.data) {
+        this.dataExists = true;
+        this.data = {};
+      }
+      this.data[snapshot.name()] = snapshot.val();
+    },
+    removeData: function(snapshot) {
+      var key = snapshot.name();
+      if (this.data instanceof Array) {
+        this.data.splice(key, 1);
+      } else if (this.data) {
+        delete this.data[key];
+      }
+    },
+    dataChange: function() {
+      //this.job('change', function() {
+        if (this.data) {
+          this.keys = this.data ? Object.keys(this.data) : [];
+        }
+        this.fire('data-change');
+      //});
+    },
+    //
+    // client-side effects
+    //
     observeArray: function(splices) {
       //console.warn('observeArray');
       // TODO(sjmiles): arrays are nasty because simple insertions/deletions
@@ -306,7 +362,6 @@ Example:
       this.commit();
     },
     observeObject: function(added, removed, changed, getOldValueFn) {
-      //console.warn('observeObject');
       // client-side dynamics
       var ctrlr = this;
       Object.keys(added).forEach(function(property) {
@@ -322,22 +377,37 @@ Example:
     // api for manual commits
     commitProperty: function(key) {
       this.log && console.log('commitProperty ' + key);
-      this.ref.child(key).set(this.data[key]);
-    },
-    commit: function() {
-      this.log && console.log('commit');
-      this.ref.set(this.data);
-    },
-    push: function(item) {
-      if (this.data instanceof Array) {
-        this.ref.commitProperty(this.data.push(item)-1);
-      } else {
-        this.ref.push(item);
+      if (this.ref) {
+        this.ref.child(key).set(this.data[key]);
       }
-      this.dataChange();
     },
     remove: function(key) {
       this.ref.child(key).remove();
+    },
+    commit: function() {
+      this.log && console.log('commit');
+      if (this.ref) {
+        if (this.data) {
+          if (this.priority != null) {
+            this.ref.setWithPriority(this.data, this.priority);
+          } else {
+            this.ref.set(this.data);
+          }
+        } else {
+          this.ref.remove();
+          this.dataExists = false;
+        }
+      }
+    },
+    push: function(item) {
+      var neo;
+      if (this.data instanceof Array) {
+        this.ref.commitProperty(this.data.push(item)-1);
+      } else {
+        neo = this.ref.push(item);
+      }
+      this.dataChange();
+      return neo;
     }
   });
 </script>
