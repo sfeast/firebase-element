@@ -6,11 +6,11 @@
     "firebase": "*"
   },
   "homepage": "https://github.com/Polymer/firebase-element",
-  "_release": "33e126582d",
+  "_release": "90565bef4e",
   "_resolution": {
     "type": "branch",
     "branch": "master",
-    "commit": "33e126582d9002e5834d15aeb751cd202d03adb0"
+    "commit": "90565bef4eee8dfbfe4a078558c11eca941b3629"
   },
   "_source": "git://github.com/Polymer/firebase-element.git",
   "_target": "master",
