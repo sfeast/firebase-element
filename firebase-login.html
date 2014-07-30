@@ -78,7 +78,7 @@ Element wrapper for the Firebase Simple Login API (https://www.firebase.com/docs
      */
     params: null,
 
-    ready: function() {
+    locationChanged: function() {
       if (!this.location) {
         // FIXME(kschaaf): doesn't seem to be a way to un-register auth callbacks, so
         // for now require a static location (switching locations should be rare)
