@@ -76,7 +76,7 @@ Element wrapper for the Firebase authentication API (https://www.firebase.com/do
 
     /**
      * Default login provider type.  May be one of: `anonymous`, `custom`, `password`
-     * `facebook`, `github`, `twitter`, `google`.
+     * `facebook`, `github`, `twitter`, `google`, `authtoken`.
      * @attribute provider
      * @type String
      * @default 'anonymous'
@@ -232,6 +232,9 @@ Element wrapper for the Firebase authentication API (https://www.firebase.com/do
             break;
           case 'custom':
             this.ref.authWithCustomToken(params.token, this._loginHandler.bind(this));
+            break;
+          case 'authtoken':
+            this.ref.authWithOAuthToken(params.provider, params.token, this._loginHandler.bind(this));
             break;
           case 'facebook':
           case 'google':
